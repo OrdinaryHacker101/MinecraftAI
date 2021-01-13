@@ -1,0 +1,6 @@
+# MinecraftAI
+
+#Idea Curator / Adviser
+#Visakan
+
+#ALL THANKS GOES TO VISAKAN WITHOUT HIM THIS WOULDN'T HAVE BEEN POSSIBLE
