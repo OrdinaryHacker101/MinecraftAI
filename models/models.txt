@@ -1,0 +1,5 @@
+1. AZNET
+
+Purpose: to watch videos and determine the next most reasonable moves based on the video frames.
+Issues: it cannot yet use logic to determine the moves; needs a deeper network.
+Notes: may be trained and merged into a bigger neural network.
