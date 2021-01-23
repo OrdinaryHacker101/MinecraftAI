@@ -1,0 +1,4 @@
+I have noticed this project extends beyond just completing the Minecraft game using brute force and deep learning or reinforcement learning.
+To accomplish anything, a normal human would need the cognitive functions that allow them to imagine, self-regulate on what to do, and to act in their best interests.
+In this folder, I will start mini projects on using already-existent research on AI to build an AI that can imagine what it wants to do, know its own strengths and weaknesses,
+and even more.
