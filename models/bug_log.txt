@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "env_test.py", line 47, in <module>
+    main()
+  File "env_test.py", line 41, in main
+    obs, reward, done, info = env.step({action_labels[i]: np.rint(predictions[i]).astype(np.int32)})
+  File "C:\Users\Robin\anaconda3\envs\env_pytorch\lib\site-packages\gym\wrappers\time_limit.py", line 16, in step
+    observation, reward, done, info = self.env.step(action)
+  File "C:\Users\Robin\anaconda3\envs\env_pytorch\lib\site-packages\minerl\env\core.py", line 611, in step
+    malmo_command = self._process_action(action)
+  File "C:\Users\Robin\anaconda3\envs\env_pytorch\lib\site-packages\minerl\env\core.py", line 399, in _process_action
+    action_in[act], str), "Enum action {} must be str or int".format(act)
+AssertionError: Enum action place must be str or int
+Failed to delete the temporary minecraft directory.
