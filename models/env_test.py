@@ -36,7 +36,7 @@ def main():
 
         #calculated actions 
         predictions = model.predict([np.array(img).reshape(1, 64, 64, 3), np.array(obs_labels).reshape(1,3)])
-
+        predictions = np.rint(predictions).astype(np.int32)
         #camera actions calculated my the model
         camera_x = predictions[0][-2]
         camera_y = predictions[0][-1]
@@ -47,7 +47,7 @@ def main():
 
         #This is where the error occurs, and this is the code for doing the action in the environment
         for i in range(len(predictions)):
-            obs, reward, done, info = env.step({action_labels[i]: np.rint(predictions[i]).astype(np.int32)})
+            obs, reward, done, info = env.step({action_labels[int(i)]: int(predictions[int(i)])})
 
         #code for moving the camera
         obs, reward, done, info = env.step({"camera": [camera_x, camera_y]})
