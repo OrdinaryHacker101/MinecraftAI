@@ -21,11 +21,17 @@ EPISODES = 10
 MAX_STEPS = 100
 DISCOUNT_FACTOR = 0.6
 
+ACTIONS_PER_MASTERY = 1
+EPISODES_PER_MASTERY = 2
+
 OPTIMIZER = keras.optimizers.Adam(lr=0.01)
 LOSS_FN = keras.losses.binary_crossentropy
+
 current_episode = 0
 basic_size = 4
 rewards = 0
+
+done = False
 
 def use_obs_in_model(obs, reward):
     
@@ -40,19 +46,38 @@ def use_obs_in_model(obs, reward):
     print(obs_labels)
     return obs_labels
 
-def play_one_step(env, obs, img, model, loss_fn, reward):
+#play an action
+def play_one_step(env, obs, img, model, loss_fn, reward, act_mastery):
+    
+    #creates a new gradient
     with tf.GradientTape() as tape:
-        preds = model([np.array(img).reshape(1, 64, 64, 3), use_obs_in_model(obs, reward).reshape(1,3)])
         
+        #probability of moving each action made by the model
+        preds = model([np.array(img).reshape(1, 64, 64, 3), use_obs_in_model(obs, reward).reshape(1,3)])
+            
+        #camera actions
         camera_x = preds[0][-2]
         camera_y = preds[0][-1]
 
+        preds = preds.numpy()
+
+        #checking whether or not every action has been mastered; if so, this "if" loop is not going to be run
+        if ACTIONS_PER_MASTERY != len(preds[0]):
+            preds[0][:-2][act_mastery:] = 1
+
+        #the actions are produced by random decimals between 0 and 1 and comparing to see whether or not it 
+        #is greater than the predictions. If true, 1 is outputted, if false, 0 is outputted
         actions = tf.cast((tf.random.uniform([1, 9]) > preds[0][:-2]), tf.float32)
+
+        #subtracts all the actions to see what probabilities have not yet been taken
         y_target = tf.ones([1, 9], tf.float32) - actions
         
         print("Actions: ", actions)
+
+        #finds the loss of the actions predicted and the other possibilities
         loss = tf.reduce_mean(loss_fn(y_target, actions))
 
+    #applies the gradient
     grads = tape.gradient(loss, model.trainable_variables)
     #This is the code for doing the action in the environment
     for i in range(len(actions[0])):
@@ -64,22 +89,28 @@ def play_one_step(env, obs, img, model, loss_fn, reward):
     print(rewards)
     return obs, reward, done, grads
 
-def play_multiple_episodes(env, EPISODES, MAX_STEPS, img, model, loss_fn, reward):
+def play_multiple_episodes(env, EPISODES, MAX_STEPS, img, model, loss_fn, reward, act_mastery):
     all_rewards = []
     all_grads = []
     for episode in range(EPISODES):
+        if episode % EPISODES_PER_MASTERY == 0:
+            act_mastery += 1
         print("EPISODE: ",episode)
         current_rewards = []
         current_grads = []
         obs = env.reset()
         for step in range(MAX_STEPS):
-            obs, REWARD, done, grads = play_one_step(env, obs, img, model, loss_fn, reward)
+            obs, REWARD, done, grads = play_one_step(env, obs, img, model, loss_fn, reward, act_mastery)
             current_rewards.append(REWARD)
             current_grads.append(grads)
             if done:
                 break
         all_rewards.append(current_rewards)
         all_grads.append(current_grads)
+        
+        print("plotting rewards")
+        plt.plot(current_rewards)
+        plt.show()
     return all_rewards, all_grads
 
 def discount_rewards(reward, discount_factor):
@@ -105,7 +136,7 @@ def train_model():
         img = env.render(mode="rgb_array")
 
         all_rewards, all_grads = play_multiple_episodes(
-            env, EPISODES, MAX_STEPS, img, model, LOSS_FN, rewards)
+            env, EPISODES, MAX_STEPS, img, model, LOSS_FN, rewards, ACTIONS_PER_MASTERY)
         all_final_rewards = discount_and_normalize_rewards(all_rewards,
                                                            discount_factor)
         all_mean_grads = []
