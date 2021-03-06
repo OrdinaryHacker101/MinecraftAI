@@ -27,15 +27,19 @@ def use_obs_in_model(obs, reward):
     obs_img = obs[obs_metalabels[-1]]
     obs_labels.insert(0, reward)
     obs_labels = np.asarray(obs_labels).astype(np.float32)
+    print(obs_img)
+    print(obs_img.shape)
+    print(np.array(obs_img).dtype)
     print(obs_labels)
-    return [obs_img, obs_labels]
+    print(np.array(obs_labels).dtype)
+    return [np.array(obs_img).reshape(1, 64, 64, 3).astype(np.float32), obs_labels.reshape(1,3)]
 
 def train_model():
     
     env = gym.make("MineRLNavigateDense-v0")
     
     agent = Agent(lr=0.0005, gamma=0.99, n_actions=9, main_model=model, epsilon=1.0,
-                  batch_size=64, input_dims=[3])
+                  batch_size=64, input_dims=[2])
     n_games = 500
     scores = []
     for i in range(n_games):
@@ -55,7 +59,9 @@ def train_model():
             
             obs_, reward, done, info = env.step({"camera": [camera_x*180, camera_y*180]})
             score += reward
-            agent.store_transition(obs, action, reward, obs_, done)
+            state = use_obs_in_model(obs, reward)
+            state_ = use_obs_in_model(obs_, reward)
+            agent.store_transition(state[0], state[1], action, reward, state_[0], state_[1], done)
             obs = obs_
             agent.learn()
         scores.append(score)

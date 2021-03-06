@@ -23,7 +23,7 @@ class DDDQN(keras.Model):
         A = self.main_model(state)
         #x = self.dense1(x)
         #x = self.dense2(x)
-        V = self.V(x)
+        V = self.V(A)
         #A = self.A(x)
 
         Q = (V + (A - tf.math.reduce_mean(A, axis=1, keepdims=True)))
@@ -40,23 +40,30 @@ class DDDQN(keras.Model):
 
 class ReplayBuffer():
 
-    def __init__(self, max_size, input_shape):
+    def __init__(self, max_size, input_shape, obs_size=[1,3]):
         self.mem_size = max_size
+        self.img_size = [64, 64, 3]
         self.mem_cntr = 0
 
-        self.state_memory = np.zeros((self.mem_size, *input_shape),
+        self.state_memory = np.zeros((self.mem_size, *self.img_size),
                                      dtype=np.float32)
-        self.new_state_memory = np.zeros((self.mem_size, *input_shape),
+        self.state_val = np.zeros((self.mem_size, *obs_size), dtype=np.float32)
+        
+        self.new_state_memory = np.zeros((self.mem_size, *self.img_size),
                                          dtype=np.float32)
+        self.new_state_val = np.zeros((self.mem_size, *obs_size), dtype=np.float32)
+
         self.action_memory = np.zeros(self.mem_size, dtype=np.int32)
         self.reward_memory = np.zeros(self.mem_size, dtype=np.float32)
         self.terminal_memory = np.zeros(self.mem_size, dtype=np.bool)
 
-    def store_transition(self, state, action, reward, state_, done):
+    def store_transition(self, state, s_val, action, reward, state_, s_val_, done):
         index = self.mem_cntr % self.mem_size
         self.state_memory[index] = state
+        self.state_val[index] = s_val
         self.new_state_memory[index] = state_
-        self.action_memory[index] = action
+        self.new_state_val[index] = s_val_
+        self.action_memory[index] = action 
         self.reward_memory[index] = reward
         self.terminal_memory[index] = done
 
@@ -67,19 +74,21 @@ class ReplayBuffer():
         batch = np.random.choice(max_mem, batch_size, replace=False)
 
         states = self.state_memory[batch]
+        state_vals = self.state_val[batch]
         states_ = self.new_state_memory[batch]
+        state_vals_ = self.new_state_val[batch]
         actions = self.action_memory[batch]
         rewards = self.reward_memory[batch]
         dones = self.terminal_memory[batch]
 
-        return states, actions, rewards, states_, dones
+        return states, state_vals, actions, rewards, states_, state_vals_, dones
 
 class Agent():
     #this class combines the models, memories, and hyperparameters that everything
     #is training on.
     def __init__(self, lr, gamma, n_actions, main_model, epsilon, batch_size,
                  input_dims, epsilon_dec=1e-3, eps_end=0.01,
-                 mem_size=1000000, fc1_dims=128, fc2_dims=128, replace=100):
+                 mem_size=1000, fc1_dims=128, fc2_dims=128, replace=100):
         self.action_space = [i for i in range(n_actions)]
         self.gamma = gamma
         self.epsilon = epsilon
@@ -98,8 +107,8 @@ class Agent():
         self.q_next.compile(optimizer=Adam(learning_rate=lr),
                             loss="mean_squared_error")
 
-    def store_transition(self, state, action, reward, new_state, done):
-        self.memory.store_transition(state, action, reward, new_state, done)
+    def store_transition(self, state, s_val, action, reward, state_, s_val_, done):
+        self.memory.store_transition(state, s_val, action, reward, state_, s_val_, done)
 
     #chooses if the action is random or calculated by the model. It starts by
     #having a random action moved, but as time goes on, the self.epsilon variable
@@ -108,14 +117,14 @@ class Agent():
         if np.random.random() < self.epsilon:
             action = np.random.choice(self.action_space)
         else:
-            state = np.array([observation])
+            state = observation
             actions = self.q_eval.advantage(state)
             action = tf.math.argmax(actions, axis=1).numpy()[0]
 
         return action
 
     def mouse_control(self, observation):
-        state = np.array(observation)
+        state = observation
         preds = self.q_eval.advantage(state)[0]
         camera_x, camera_y = preds[-2], preds[-1]
         return camera_x, camera_y
@@ -127,9 +136,11 @@ class Agent():
         if self.learn_step_counter % self.replace == 0:
             self.q_next.set_weights(self.q_eval.get_weights())
 
-        states, actions, rewards, states_, dones = \
+        #state, s_val, action, reward, state_, s_val_, done
+        states, s_vals, actions, rewards, states_, s_vals_, dones = \
                 self.memory.sample_buffer(self.batch_size)
-
+        states = [states, s_vals]
+        states_ = [states_, s_vals_]
         #predicted current q values
         q_pred = self.q_eval(states)
         
