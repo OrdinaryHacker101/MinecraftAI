@@ -8,19 +8,23 @@ import matplotlib.pyplot as plt
 import tqdm
 
 #AZNET
-model = tf.keras.models.load_model("C:\\Users\\Robin\\Desktop\\deep_learning\\models\\AZNET.h5")
+model = keras.models.load_model("C:\\Users\\Robin\\Desktop\\deep_learning\\models\\AZNET.h5")
 
 class DDDQN(keras.Model):
     def __init__(self, n_actions, main_model, fc1_dims, fc2_dims):
         super(DDDQN, self).__init__()
         self.main_model = main_model
+        #lays = main_model.layers
+        #self.the_layers = lays.set_weights(main_model.get_weights())
+        #self.the_layers.set_weights(self.main_model.get_weights())
         #self.dense1 = keras.layers.Dense(fc1_dims, activation="elu")
         #self.dense2 = keras.layers.Dense(fc2_dims, activation="elu")
-        self.V = keras.layers.Dense(1, activation="tanh")
-        #self.A = keras.layers.Dense(n_actions, activation="sigmoid")
+        self.V = keras.layers.Dense(1, activation=None)
+        self.A = keras.layers.Dense(n_actions, activation=None)
 
     def call(self, state):
         A = self.main_model(state)
+        self.main_model.summary()
         #x = self.dense1(x)
         #x = self.dense2(x)
         V = self.V(A)
@@ -30,17 +34,23 @@ class DDDQN(keras.Model):
 
         return Q
 
-    def advantage(self, state):
-        A = self.main_model(state)
+    #def mouse(self, state):
+        #M = self.main_model(state)
         #x = self.dense1(x)
         #x = self.dense2(x)
         #A = self.A(x)
+
+        #return M
+
+    def advantage(self, state):
+        x = self.main_model(state)
+        A = self.A(x)
 
         return A
 
 class ReplayBuffer():
 
-    def __init__(self, max_size, input_shape, obs_size=[1,3]):
+    def __init__(self, max_size, input_shape, obs_size=[3]):
         self.mem_size = max_size
         self.img_size = [64, 64, 3]
         self.mem_cntr = 0
@@ -113,28 +123,33 @@ class Agent():
     #chooses if the action is random or calculated by the model. It starts by
     #having a random action moved, but as time goes on, the self.epsilon variable
     #decreases, and it starts to use the model more and more.
+    
     def choose_action(self, observation):
+        #def mouse_control(observation):
+            #state = observation
+            #q_eval = DDDQN(8, model, 1, 2)
+            #preds = q_eval.mouse(state)[0]
+            #camera_x, camera_y = preds[-2], preds[-1]
+            #return camera_x, camera_y
         if np.random.random() < self.epsilon:
             action = np.random.choice(self.action_space)
+            camera_x, camera_y = np.random.randint(-180, 181, 2)
         else:
             state = observation
             actions = self.q_eval.advantage(state)
             action = tf.math.argmax(actions, axis=1).numpy()[0]
+            #camera_x, camera_y = mouse_control(state)
 
-        return action
-
-    def mouse_control(self, observation):
-        state = observation
-        preds = self.q_eval.advantage(state)[0]
-        camera_x, camera_y = preds[-2], preds[-1]
-        return camera_x, camera_y
+        return action, [0, 0]
 
     def learn(self):
         if self.memory.mem_cntr < self.batch_size:
             return
 
+        print(self.learn_step_counter%self.replace)
         if self.learn_step_counter % self.replace == 0:
-            self.q_next.set_weights(self.q_eval.get_weights())
+            print(np.asarray(self.q_eval.get_weights()).shape)
+            self.q_next.set_weights(np.asarray(self.q_eval.get_weights()))
 
         #state, s_val, action, reward, state_, s_val_, done
         states, s_vals, actions, rewards, states_, s_vals_, dones = \
