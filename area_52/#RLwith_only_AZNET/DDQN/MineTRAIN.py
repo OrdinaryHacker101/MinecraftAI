@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
+import time
 from MineDDDQNPG import Agent
 
 action_labels = ["forward", "left", "back", "right", "jump", "sneak", "sprint", "attack", "place", "camera"]
@@ -27,12 +28,8 @@ def use_obs_in_model(obs, reward):
     obs_img = obs[obs_metalabels[-1]]
     obs_labels.insert(0, reward)
     obs_labels = np.asarray(obs_labels).astype(np.float32)
-    print(obs_img)
-    print(obs_img.shape)
-    print(np.array(obs_img).dtype)
-    print(obs_labels)
-    print(np.array(obs_labels).dtype)
-    return [np.array(obs_img).reshape(1, 64, 64, 3).astype(np.float32), obs_labels.reshape(1,3)]
+    
+    return [np.array(obs_img).reshape(1, 64, 64, 3).astype(np.float32), obs_labels.reshape(3)]
 
 def train_model():
     
@@ -43,27 +40,42 @@ def train_model():
     n_games = 500
     scores = []
     for i in range(n_games):
+        step = 0
         done = False
         score = 0
         reward = 0
         obs = env.reset()
         print(obs)
-        while not done:
+        while True:
+            start_time = time.time()
+            print("Step: ",step)
+            
             img = env.render(mode="rgb_array")
-            action = agent.choose_action(use_obs_in_model(obs, reward))
+            action = agent.choose_action(use_obs_in_model(obs, reward))[0]
             print(action)
             
             obs_, reward, done, info = env.step({action_labels[action]: 1})
+            if done == True:
+                break
             score += reward
-            camera_x, camera_y = agent.mouse_control(use_obs_in_model(obs_, reward))
-            
-            obs_, reward, done, info = env.step({"camera": [camera_x*180, camera_y*180]})
-            score += reward
+            camera_x, camera_y = agent.choose_action(use_obs_in_model(obs_, reward))[1]
+
             state = use_obs_in_model(obs, reward)
             state_ = use_obs_in_model(obs_, reward)
             agent.store_transition(state[0], state[1], action, reward, state_[0], state_[1], done)
-            obs = obs_
+
             agent.learn()
+            
+            obs_, reward, done, info = env.step({"camera": [camera_x*180, camera_y*180]})
+            if done == True:
+                break
+            score += reward
+            obs = obs_
+
+            step += 1
+            current_time = time.time()
+            print("The AI took: ", current_time-start_time)
+            
         scores.append(score)
 
         avg_score = np.mean(scores[-100:])
