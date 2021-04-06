@@ -124,7 +124,7 @@ def train_model():
 
             total_rewards += reward
             if done:
-                with open("model{episode}", "wb) as f:
+                with open("model{episode}", "wb") as f:
                           pickle.dump(model, f)
                           episode += 1
                 break
