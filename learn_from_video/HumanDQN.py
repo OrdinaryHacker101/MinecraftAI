@@ -2,6 +2,7 @@ from utils import *
 
 import gym
 import minerl
+import pickle
 
 import numpy as np
 from collections import deque
@@ -98,6 +99,7 @@ def training_step(batch_size):
     optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
 def train_model():
+    episode = 0
     env = gym.make("MineRLNavigateDense-v0")
     stacked_frames = deque([np.zeros((64,64), dtype=np.uint) for i in range(stack_size)], maxlen=4)
 
@@ -122,6 +124,9 @@ def train_model():
 
             total_rewards += reward
             if done:
+                with open("model{episode}", "wb) as f:
+                          pickle.dump(model, f)
+                          episode += 1
                 break
 
             episode_start = False
