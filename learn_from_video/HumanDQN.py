@@ -4,7 +4,7 @@ import gym
 import minerl
 
 import numpy as np
-from collections import deque, OrderedDict
+from collections import deque
 
 from PIL import Image
 
@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 #ALL CREDITS GOES TO:
 #VCode1423
 #kimbring2
+#thomas simnonini
 #Aurelien Geron's Hands on ML
 
 #WITHOUT ANY OF THESE PEOPLE THIS WOULD HAVE NEVER BEEN POSSIBLE, SO I THANK THEM ALL
@@ -40,25 +41,15 @@ OPTIMIZER = keras.optimizers.Adam(lr=1e-3)
 LOSS_FN = keras.losses.mean_squared_error
 
 #frame shapes
-single_frame_size = [64,64,4]
+stacked_frame_shape = [64,64,5]
+stack_size = 4
+
+#chkpt directory
+chkpt_dir = "C:\\Users\\Robin\\Desktop\\deep_learning\\DQFD\\chkpts"
 
 #model necessities
 model = build_dqn()
-memory = ReplayBuffer(20000, single_frame_size)
-
-def converter(observation):
-    obs = list(observation.items())[2][1]
-    print(obs)
-    obs = obs / 255
-    compass_angle = list(observation.items())[0][1]
-    print(compass_angle)
-
-    compass_angle_scale = 180
-    compass_scaled = compass_angle / compass_angle_scale
-    compass_channel = np.ones(shape=list(obs.shape[:-1]) + [1], dtype=obs.dtype) * compass_scaled
-    obs = np.concatenate([obs, compass_channel], axis=-1)
-
-    return obs
+memory = ReplayBuffer(20000, stacked_frame_shape)
 
 def epsilon_greedy_policy(state, epsilon):
     if np.random.rand() < epsilon:
@@ -71,7 +62,7 @@ def sample_experiences(batch_size):
     states, n_states, actions, rewards, dones = memory.sample_mem(batch_size)
     return states, n_states, actions, rewards, dones
 
-def play_one_step(env, state, epsilon):
+def play_one_step(env, state, epsilon, stacked_frames, episode_start):
     
     action_index = epsilon_greedy_policy(state, epsilon)
     action = env.action_space.noop()
@@ -84,12 +75,12 @@ def play_one_step(env, state, epsilon):
         action["camera"] = [0, 5]
         
     n_state, reward, done, info = env.step(action)
-    n_state = converter(n_state)
+    n_state, stacked = converter(n_state, stacked_frames, episode_start)
 
     #to be changed when HumanDQN is applied
     memory.save_mem(state, action_index, reward, n_state, done)
 
-    return n_state, reward, done
+    return n_state, reward, done, stacked
 
 def training_step(batch_size):
     experiences = memory.sample_mem(batch_size)
@@ -108,26 +99,35 @@ def training_step(batch_size):
 
 def train_model():
     env = gym.make("MineRLNavigateDense-v0")
+    stacked_frames = deque([np.zeros((64,64), dtype=np.uint) for i in range(stack_size)], maxlen=4)
 
     for episode in range(EPISODES):
         print("Episode: ", episode)
+
         obs = env.reset()
+        episode_start = True
         done = False
+        
         total_rewards = 0
-        obs = converter(obs)
+        obs, to_be_stacked = converter(obs, stacked_frames, episode_start)
+
+        stacked_frames = to_be_stacked
         
         for step in range(MAX_STEPS):
             img = env.render(mode="rgb_array")
             epsilon = max(1 - episode/ 500, 0.01)
             print(obs)
             
-            obs, reward, done = play_one_step(env, obs, epsilon)
+            obs, reward, done, to_be_stacked = play_one_step(env, obs, epsilon, stacked_frames, episode_start)
 
             total_rewards += reward
             if done:
                 break
+
+            episode_start = False
+            
         if episode > 50:
-            training_step(batch_size)
+            training_step(BATCH_SIZE)
 
         print("Total rewards: ", total_rewards)
 
