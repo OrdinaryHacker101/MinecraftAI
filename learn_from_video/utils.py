@@ -3,6 +3,8 @@ from collections import deque
 
 from PIL import Image
 
+from trees import *
+
 import tensorflow as tf
 from tensorflow import keras
 
@@ -83,7 +85,7 @@ class ReplayBuffer():
         self.n_state_mem[index] = n_state
         self.action_mem[index] = action
         self.reward_mem[index] = reward
-        self.done_mem = done
+        self.done_mem[index] = done
 
         self.mem_cntr += 1
 
@@ -99,5 +101,64 @@ class ReplayBuffer():
         dones = self.done_mem[batch]
 
         return states, n_states, actions, rewards, dones
+
         
-        
+class PER():
+
+    PER_e = 0.01
+    PER_a = 0.6
+    PER_b = 0.4
+
+    PER_b_increment_per_sampling = 0.001
+
+    def __init__(self, capacity):
+
+        self.tree = SumTree(capacity)
+        self.absolute_error_upper = 1.
+
+    def store(self, experience):
+        max_priority = np.max(self.tree.tree[-self.tree.capacity:])
+
+        if max_priority == 0:
+            max_priority = self.absolute_error_upper
+
+        self.tree.add(max_priority, experience)
+
+    def sample(self, n):
+        memory_b = []
+
+        b_idx, b_ISWeights = np.empty((n,), dtype=np.int32), np.empty((n, 1), dtype=np.float32)
+
+        priority_segment = self.tree.total_priority / n
+        self.PER_b = np.min([1., self.PER_b + self.PER_b_increment_per_sampling])
+
+        p_min = np.min(self.tree.tree[-self.tree.capacity:]) / self.tree.total_priority
+        max_weight = (p_min * n) ** (-self.PER_b)
+
+        for i in range(n):
+
+            a, b = priority_segment * i, priority_segment * (i + 1)
+            value = np.random.uniform(a, b)
+
+            index, priority, data = self.tree.get_leaf(value)
+            sampling_probabilities = priority / self.tree.total_priority
+
+            b_ISWeights[i, 0] = np.power(n * sampling_probabilities, -self.PER_b)/ max_weight
+            b_idx[i] = index
+
+            experience = [data]
+            memory_b.append(experience)
+
+        return b_idx, memory_b, b_ISWeights
+
+    def batch_update(self, tree_idx, abs_errors):
+        abs_errors += self.PER_e
+        clipped_errors = np.minimum(abs_errors, self.absolute_error_upper)
+        ps = np.power(clipped_errors, self.PER_a)
+        print(ps)
+        for ti, p in zip(tree_idx, ps):
+            print(ti, p)
+            p = tf.reduce_mean(p)
+            self.tree.update(ti, p)
+
+            

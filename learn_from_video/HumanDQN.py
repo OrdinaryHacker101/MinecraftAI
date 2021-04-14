@@ -1,8 +1,11 @@
+import os
+
 from utils import *
+
+import pickle
 
 import gym
 import minerl
-import pickle
 
 import numpy as np
 from collections import deque
@@ -48,9 +51,15 @@ stack_size = 4
 #chkpt directory
 chkpt_dir = "C:\\Users\\Robin\\Desktop\\deep_learning\\DQFD\\chkpts"
 
-#model necessities
-model = build_dqn()
+model = keras.models.load_model(chkpt_dir+"\\q_model.h5")
+
+#model = build_dqn()
+
+target_model = keras.models.load_model(chkpt_dir+"\\target_q_model.h5")
+    
 memory = ReplayBuffer(20000, stacked_frame_shape)
+
+per = PER(20000)
 
 def epsilon_greedy_policy(state, epsilon):
     if np.random.rand() < epsilon:
@@ -79,30 +88,46 @@ def play_one_step(env, state, epsilon, stacked_frames, episode_start):
     n_state, stacked = converter(n_state, stacked_frames, episode_start)
 
     #to be changed when HumanDQN is applied
-    memory.save_mem(state, action_index, reward, n_state, done)
+    #memory.save_mem(state, action_index, reward, n_state, done)
+    per.store([state, action_index, reward, n_state, done])
 
     return n_state, reward, done, stacked
 
-def training_step(batch_size):
-    experiences = memory.sample_mem(batch_size)
-    states, n_states, actions, rewards, dones = experiences
-    next_Q_values = model.predict(n_states)
+def training_step(batch_size, episode, tau):
+    #experiences = memory.sample_mem(batch_size)
+    tree_idx, experiences, ISWeights_mb = per.sample(batch_size)
+    print(np.array(experiences).shape)
+    xp = experiences
+
+    print(xp[0])
+    
+    states, actions, rewards, n_states, dones = np.array([i[0][0] for i in xp]), np.array([i[0][1] for i in xp]), np.array([i[0][2] for i in xp]), np.array([i[0][3] for i in xp]), np.array([i[0][4] for i in xp])
+    next_Q_values = target_model.predict(n_states)
     max_next_Q_values = np.max(next_Q_values, axis=1)
     target_Q_values = (rewards +
                        (1 - dones) * DISCOUNT_FACTOR * max_next_Q_values)
     mask = tf.one_hot(actions, action_range)
-    with tf.GradientTape() as Tape:
+    with tf.GradientTape() as tape:
         all_Q_values = model(states)
-        Q_values = tf.reduce_sum(all_Q_values * mask, axis = 1, keep_dims=True)
+        Q_values = tf.reduce_sum(all_Q_values * mask, axis = 1, keepdims=True)
         loss = tf.reduce_mean(LOSS_FN(target_Q_values, Q_values))
     grads = tape.gradient(loss, model.trainable_variables)
-    optimizer.apply_gradients(zip(grads, model.trainable_variables))
+    OPTIMIZER.apply_gradients(zip(grads, model.trainable_variables))
+    model.save(chkpt_dir+"\\q_model.h5")
+
+    abs_error = tf.abs(target_Q_values - Q_values)
+
+    per.batch_update(tree_idx, abs_error)
+
+    if episode % tau == 0:
+        target_model.set_weights(model.get_weights())
 
 def train_model():
-    episode = 0
     env = gym.make("MineRLNavigateDense-v0")
     stacked_frames = deque([np.zeros((64,64), dtype=np.uint) for i in range(stack_size)], maxlen=4)
 
+    tau = 10
+    
     for episode in range(EPISODES):
         print("Episode: ", episode)
 
@@ -123,16 +148,17 @@ def train_model():
             obs, reward, done, to_be_stacked = play_one_step(env, obs, epsilon, stacked_frames, episode_start)
 
             total_rewards += reward
+            
             if done:
-                with open("model{episode}", "wb") as f:
-                          pickle.dump(model, f)
-                          episode += 1
                 break
 
-            episode_start = False
+            episode_start = False     
             
         if episode > 50:
-            training_step(BATCH_SIZE)
+            '''filelist = [ f for f in os.listdir(chkpt_dir)]
+            for f in filelist:
+                os.remove(os.path.join(mydir, f))'''
+            training_step(BATCH_SIZE, episode, tau)
 
         print("Total rewards: ", total_rewards)
 
