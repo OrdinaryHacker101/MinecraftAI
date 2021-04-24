@@ -38,6 +38,7 @@ print(N_ACTIONS)
 
 replay_buffer = ReplayBuffer(BUFFER_SIZE, IMG_SHAPE)
 
+#DQRN
 model = keras.models.Sequential([
     keras.layers.Conv2D(32, kernel_size=8, strides=4, input_shape=IMG_SHAPE),
     keras.layers.Conv2D(64, kernel_size=4, strides=2),
@@ -49,12 +50,22 @@ model = keras.models.Sequential([
     keras.layers.Dense(N_ACTIONS)
     ])
 
+#BASELINE DQN
+model = keras.models.Sequential([
+    keras.layers.Conv2D(64, kernel_size=5, input_shape=IMG_SHAPE),
+    keras.layers.Conv2D(32, kernel_size=3),
+    keras.layers.Flatten(),
+    keras.layers.Dense(N_ACTIONS)
+    
+])
+
+
 target = keras.models.clone_model(model)
 target.set_weights(model.get_weights())
 
 def epsilon_greedy_policy(state, epsilon):
     if np.random.rand() < epsilon:
-        return np.random.randint(2)
+        return np.random.randint(6)
     else:
         Q_values = model.predict(state[np.newaxis])
         return np.argmax(Q_values[0])
